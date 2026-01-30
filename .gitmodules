@@ -1,0 +1,3 @@
+[submodule "lib/esp-mesh-lite-arduino"]
+	path = lib/esp-mesh-lite-arduino
+	url = https://github.com/andrewflash/esp-mesh-lite-arduino.git
