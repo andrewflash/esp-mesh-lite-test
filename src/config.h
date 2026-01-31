@@ -1,7 +1,7 @@
 #pragma once
 
 // Project Version
-#define PROJECT_VERSION "1.0.0"
+#define PROJECT_VERSION "1.0.1"
 
 // Build-time configuration from .env
 #ifndef WIFI_SSID

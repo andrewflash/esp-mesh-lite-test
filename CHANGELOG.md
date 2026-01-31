@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2025-01-31
+
+### Fixed
+
+- **Network Failure Fallback**
+  - Automatic switch to mesh-only mode after consecutive MQTT/network failures
+  - Configurable failure threshold via `MESH_MAX_ROUTER_FAILURES` (default: 5)
+  - Node joins other mesh nodes as child when router connection fails
+  - Failure counter resets on successful network operation
+
+### Changed
+
+- Renamed `MESH_MAX_ROUTER_AUTH_FAILURES` to `MESH_MAX_ROUTER_FAILURES`
+- Network failure detection now uses application-level tracking (MQTT failures)
+  instead of WiFi event-based tracking for better compatibility with ESP-Mesh-Lite
+
 ## [1.0.0] - 2025-01-31
 
 ### Added
@@ -75,4 +91,5 @@ lib/
 }
 ```
 
+[1.0.1]: https://github.com/andrewflash/esp-mesh-lite-test/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/andrewflash/esp-mesh-lite-test/releases/tag/v1.0.0
