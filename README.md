@@ -1,6 +1,6 @@
 # ESP-Mesh-Lite + MQTT Gateway
 
-[![Version](https://img.shields.io/badge/version-1.0.1-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](CHANGELOG.md)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-ESP32-orange.svg)](https://www.espressif.com)
 
@@ -12,6 +12,8 @@ ESP32 mesh network with MQTT gateway using [ESP-Mesh-Lite](https://github.com/es
 - **Binary protocol** - Optimized 16-byte status messages (vs ~60 bytes JSON)
 - **Unified MQTT topics** - Consistent device-centric topic structure
 - **Auto mesh fallback** - Nodes automatically rejoin mesh when router connection lost
+- **OLED display** - Configurable status display (SSD1306/SH1106, 128x64/128x32)
+- **Watchdog timer** - Auto-restart on hang (configurable timeout)
 
 ## Architecture
 
@@ -41,13 +43,17 @@ Mesh Fallback (C loses router):
 
 ```
 src/
-├── main.cpp              # Gateway logic
-├── config.h              # Configuration (mesh, MQTT, intervals)
+├── main.cpp              # Application entry point
+├── config.h              # Configuration (mesh, MQTT, display, watchdog)
 ├── mesh/
 │   ├── mesh_handler.h/cpp    # Mesh communication wrapper
-│   ├── binary_protocol.h/cpp # Optimized binary messages
-└── mqtt/
-    ├── mqtt_client.h/cpp     # MQTT client wrapper
+│   └── binary_protocol.h/cpp # Optimized binary messages
+├── mqtt/
+│   └── mqtt_client.h/cpp     # MQTT client wrapper
+├── gateway/
+│   └── gateway.h/cpp         # Mesh-MQTT bridge logic
+└── display/
+    └── display_handler.h/cpp # OLED display handler
 
 lib/
 └── esp-mesh-lite-arduino/    # ESP-Mesh-Lite Arduino library (v1.1.0)
