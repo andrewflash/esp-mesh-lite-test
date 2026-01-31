@@ -1,7 +1,7 @@
 #pragma once
 
 // Project Version
-#define PROJECT_VERSION "1.0.1"
+#define PROJECT_VERSION "1.1.0"
 
 // Build-time configuration from .env
 #ifndef WIFI_SSID
@@ -73,6 +73,44 @@
 //   {prefix}/{device_id}/cmd     - command to node (downlink)
 //   {prefix}/broadcast           - broadcast to all nodes
 
+// Watchdog
+#ifndef WDT_TIMEOUT_SEC
+#define WDT_TIMEOUT_SEC 30                // Watchdog timeout in seconds
+#endif
+
 // Intervals
 #define STATUS_INTERVAL_MS 10000
 #define MQTT_RECONNECT_INTERVAL_MS 5000
+
+// OLED Display Configuration
+#ifndef DISPLAY_ENABLED
+#define DISPLAY_ENABLED 1             // 0 = disabled, 1 = enabled
+#endif
+#ifndef DISPLAY_TYPE
+#define DISPLAY_TYPE DISPLAY_SSD1306  // DISPLAY_SSD1306 or DISPLAY_SH1106
+#endif
+#ifndef DISPLAY_WIDTH
+#define DISPLAY_WIDTH 128
+#endif
+#ifndef DISPLAY_HEIGHT
+#define DISPLAY_HEIGHT 64             // 64 or 32
+#endif
+#ifndef DISPLAY_SDA_PIN
+#define DISPLAY_SDA_PIN 21            // I2C SDA pin
+#endif
+#ifndef DISPLAY_SCL_PIN
+#define DISPLAY_SCL_PIN 22            // I2C SCL pin
+#endif
+#ifndef DISPLAY_I2C_ADDR
+#define DISPLAY_I2C_ADDR 0x3C         // 0x3C or 0x3D
+#endif
+#ifndef DISPLAY_ROTATION
+#define DISPLAY_ROTATION 0            // 0, 1, 2, or 3 (90° increments)
+#endif
+#ifndef DISPLAY_UPDATE_MS
+#define DISPLAY_UPDATE_MS 1000        // Display refresh interval
+#endif
+
+// Display type constants
+#define DISPLAY_SSD1306 0
+#define DISPLAY_SH1106  1
