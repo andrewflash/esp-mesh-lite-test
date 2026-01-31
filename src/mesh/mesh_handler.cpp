@@ -21,6 +21,8 @@ MeshHandler::MeshHandler()
     : _eventCallback(nullptr)
     , _messageCallback(nullptr)
     , _binaryCallback(nullptr)
+    , _connectionFailures(0)
+    , _meshOnlyMode(false)
 {
     _instance = this;
     memset(_mac, 0, sizeof(_mac));
@@ -40,6 +42,43 @@ void MeshHandler::meshEventHandler(esp_event_base_t base, int32_t id, void* data
     if (_instance && _instance->_eventCallback) {
         _instance->_eventCallback(id);
     }
+}
+
+// Application-level network failure tracking
+// Call this when network operations (DNS, MQTT) fail while node is root
+void MeshHandler::reportNetworkFailure()
+{
+    if (_meshOnlyMode) return;  // Already in mesh-only mode
+
+    _connectionFailures++;
+    Serial.printf("[MESH] Network failure #%d/%d\n",
+                  _connectionFailures, MESH_MAX_ROUTER_FAILURES);
+
+    // Check if we should switch to mesh-only mode
+    if (_connectionFailures >= MESH_MAX_ROUTER_FAILURES) {
+        switchToMeshOnlyMode();
+    }
+}
+
+// Call this when network operation succeeds
+void MeshHandler::reportNetworkSuccess()
+{
+    if (_connectionFailures > 0) {
+        Serial.println("[MESH] Network OK, reset failure counter");
+        _connectionFailures = 0;
+    }
+}
+
+void MeshHandler::switchToMeshOnlyMode()
+{
+    _meshOnlyMode = true;
+    Serial.printf("[MESH] Switching to mesh-only mode after %d network failures\n",
+                  _connectionFailures);
+
+    // Disable router-first mode, force mesh mode
+    _mesh.setNetworkingMode(false, MESH_ROUTER_RSSI_THRESHOLD);
+
+    Serial.println("[MESH] Now scanning for mesh parent nodes...");
 }
 
 cJSON* MeshHandler::meshMessageHandler(cJSON* payload, uint32_t seq)

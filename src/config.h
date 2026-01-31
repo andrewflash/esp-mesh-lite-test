@@ -47,6 +47,11 @@
 #define MESH_RECONNECT_SCAN_INTERVAL 5    // seconds between scans for new parent
 #endif
 
+// Network Failure Fallback (switches to mesh-only mode after N failures)
+#ifndef MESH_MAX_ROUTER_FAILURES
+#define MESH_MAX_ROUTER_FAILURES 5        // max MQTT/network failures before mesh fallback
+#endif
+
 // MQTT Configuration
 #ifndef MQTT_BROKER
 #define MQTT_BROKER "broker.hivemq.com"

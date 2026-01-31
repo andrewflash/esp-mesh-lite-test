@@ -41,6 +41,12 @@ public:
     void onBinaryMessage(MeshBinaryCallback callback);
     void onEvent(MeshEventCallback callback);
 
+    // Connection failure tracking (call from app when network operations fail)
+    void reportNetworkFailure();    // Call when DNS/MQTT fails while root
+    void reportNetworkSuccess();    // Call when network operation succeeds
+    uint8_t getConnectionFailures() const { return _connectionFailures; }
+    bool isMeshOnlyMode() const { return _meshOnlyMode; }
+
 private:
     MeshLite _mesh;
     String _deviceId;
@@ -49,12 +55,17 @@ private:
     MeshMessageCallback _messageCallback;
     MeshBinaryCallback _binaryCallback;
 
+    // Connection failure tracking
+    uint8_t _connectionFailures;
+    bool _meshOnlyMode;
+
     static void meshEventHandler(esp_event_base_t base, int32_t id, void* data);
     static cJSON* meshMessageHandler(cJSON* payload, uint32_t seq);
     static cJSON* meshBinaryHandler(cJSON* payload, uint32_t seq);
     static MeshHandler* _instance;
 
     void generateDeviceId();
+    void switchToMeshOnlyMode();
 };
 
 extern MeshHandler meshHandler;

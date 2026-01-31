@@ -276,15 +276,34 @@ void loop()
     // Log level every 5 seconds for debugging
     if (millis() - lastLevelLogTime >= 5000) {
         lastLevelLogTime = millis();
-        Serial.printf("[DEBUG] Level: %d, Root: %s, Connected: %s\n",
-            meshHandler.getLevel(),
-            meshHandler.isRoot() ? "yes" : "no",
-            meshHandler.isConnected() ? "yes" : "no");
+        if (meshHandler.isMeshOnlyMode()) {
+            Serial.printf("[DEBUG] Level: %d, Root: %s, Connected: %s, Mode: mesh-only\n",
+                meshHandler.getLevel(),
+                meshHandler.isRoot() ? "yes" : "no",
+                meshHandler.isConnected() ? "yes" : "no");
+        } else if (meshHandler.getConnectionFailures() > 0) {
+            Serial.printf("[DEBUG] Level: %d, Root: %s, Connected: %s, NetFails: %d/%d\n",
+                meshHandler.getLevel(),
+                meshHandler.isRoot() ? "yes" : "no",
+                meshHandler.isConnected() ? "yes" : "no",
+                meshHandler.getConnectionFailures(),
+                MESH_MAX_ROUTER_FAILURES);
+        } else {
+            Serial.printf("[DEBUG] Level: %d, Root: %s, Connected: %s\n",
+                meshHandler.getLevel(),
+                meshHandler.isRoot() ? "yes" : "no",
+                meshHandler.isConnected() ? "yes" : "no");
+        }
     }
 
     if (meshHandler.isRoot()) {
         if (!mqtt.isConnected()) {
-            mqtt.connect();
+            // Try to connect, report failure if it fails
+            if (!mqtt.connect()) {
+                meshHandler.reportNetworkFailure();
+            } else {
+                meshHandler.reportNetworkSuccess();
+            }
         } else {
             mqtt.loop();
             subscribeToCommands();
