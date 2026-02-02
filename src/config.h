@@ -98,6 +98,17 @@
 //   {prefix}/{device_id}/cmd       - command to node (downlink)
 //   {prefix}/broadcast             - broadcast to all nodes
 
+// Time Sync (NTP)
+#ifndef NTP_SERVER_PRIMARY
+#define NTP_SERVER_PRIMARY "pool.ntp.org"
+#endif
+#ifndef NTP_SERVER_SECONDARY
+#define NTP_SERVER_SECONDARY "time.nist.gov"
+#endif
+#ifndef TIME_ZONE_OFFSET
+#define TIME_ZONE_OFFSET 0            // UTC offset in seconds (0 = UTC)
+#endif
+
 // Watchdog
 #ifndef WDT_TIMEOUT_SEC
 #define WDT_TIMEOUT_SEC 30                // Watchdog timeout in seconds

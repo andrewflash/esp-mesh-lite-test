@@ -45,6 +45,13 @@ public:
     // Returns wifi_phy_mode_t: 1=LR, 2=11B, 3=11G, 4=HT20, 5=HT40, 6=HE20
     static uint8_t getNegotiatedPhyMode();
 
+    // Time synchronization
+    static void initTimeSync();           // Called by root when WiFi ready
+    static bool isTimeSynced();           // Check if time is valid (after Nov 2023)
+    static uint32_t getTimestamp();       // Get current Unix timestamp (0 if not synced)
+    void syncTimeFromRoot(uint32_t timestamp);  // Child: sync from root's time
+    bool broadcastTimeSync(uint32_t timestamp); // Root: broadcast time to children
+
     void onMessage(MeshMessageCallback callback);
     void onBinaryMessage(MeshBinaryCallback callback);
     void onEvent(MeshEventCallback callback);

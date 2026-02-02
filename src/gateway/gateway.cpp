@@ -9,6 +9,7 @@ Gateway::Gateway()
     : _lastPublishTime(0)
     , _lastMqttAttempt(0)
     , _mqttSubscribed(false)
+    , _ntpInitialized(false)
 {
     _instance = this;
 }
@@ -55,6 +56,12 @@ void Gateway::loop()
                 return;
             }
 
+            // Initialize NTP when WiFi becomes ready (root node only)
+            if (!_ntpInitialized) {
+                MeshHandler::initTimeSync();
+                _ntpInitialized = true;
+            }
+
             // Throttle reconnection attempts
             if (millis() - _lastMqttAttempt >= MQTT_RECONNECT_INTERVAL_MS) {
                 _lastMqttAttempt = millis();
@@ -82,13 +89,17 @@ void Gateway::loop()
 }
 
 void Gateway::publishStatus(const char* deviceId, uint8_t level, bool isRoot,
-                            uint32_t heap, int8_t rssi, const char* parentId, uint8_t phy)
+                            uint32_t heap, int8_t rssi, const char* parentId,
+                            uint8_t phy, uint32_t timestamp)
 {
     if (!mqtt.isConnected()) return;
 
     cJSON* json = cJSON_CreateObject();
     if (!json) return;
 
+    if (timestamp > 0) {
+        cJSON_AddNumberToObject(json, "ts", timestamp);
+    }
     cJSON_AddStringToObject(json, "id", deviceId);
     cJSON_AddNumberToObject(json, "level", level);
     cJSON_AddBoolToObject(json, "root", isRoot);
@@ -146,6 +157,9 @@ void Gateway::publishData(const char* deviceId, const char* data)
 
 void Gateway::publishRootStatus()
 {
+    uint32_t timestamp = MeshHandler::getTimestamp();
+
+    // Publish to MQTT
     publishStatus(
         meshHandler.getDeviceId().c_str(),
         meshHandler.getLevel(),
@@ -153,15 +167,21 @@ void Gateway::publishRootStatus()
         ESP.getFreeHeap(),
         getWiFiRSSI(),
         meshHandler.getParentId().c_str(),
-        MeshHandler::getNegotiatedPhyMode()
+        MeshHandler::getNegotiatedPhyMode(),
+        timestamp
     );
+
+    // Broadcast time to children (they sync from this)
+    if (timestamp > 0) {
+        meshHandler.broadcastTimeSync(timestamp);
+    }
 }
 
 void Gateway::sendStatusToRoot()
 {
 #if USE_BINARY_STATUS
     if (meshHandler.sendStatusToRoot()) {
-        Serial.printf("[MESH-BIN] Tx status to root (22 bytes)\n");
+        Serial.printf("[MESH-BIN] Tx status to root (26 bytes)\n");
     } else {
         Serial.printf("[MESH-BIN] Tx status failed (level=%d, connected=%s)\n",
                       meshHandler.getLevel(),
@@ -223,13 +243,15 @@ void Gateway::onMeshMessage(const char* from, const char* data)
         bool hasFields = level && heap && rssi;
 
         if (isStatus || hasFields) {
+            cJSON* ts = cJSON_GetObjectItem(json, "ts");
             _instance->publishStatus(from,
                                      level ? (uint8_t)level->valueint : 0,
                                      false,
                                      heap ? (uint32_t)heap->valuedouble : 0,
                                      rssi ? (int8_t)rssi->valueint : 0,
                                      parent && cJSON_IsString(parent) ? parent->valuestring : "",
-                                     phy ? (uint8_t)phy->valueint : 0);
+                                     phy ? (uint8_t)phy->valueint : 0,
+                                     ts ? (uint32_t)ts->valuedouble : 0);
             cJSON_Delete(json);
             return;
         }
@@ -263,12 +285,17 @@ void Gateway::onBinaryMessage(const uint8_t* data, size_t len)
                 char parentStr[13];
                 BinaryProtocol::macToString(status->parentMac, parentStr, sizeof(parentStr));
 
-                Serial.printf("[MESH-BIN] Status: level=%d, heap=%lu, rssi=%d, parent=%s, phy=%d\n",
-                              status->level, status->heap, status->rssi, parentStr, status->phy);
+                Serial.printf("[MESH-BIN] Status: level=%d, heap=%lu, rssi=%d, parent=%s, phy=%d, ts=%lu\n",
+                              status->level, status->heap, status->rssi, parentStr, status->phy,
+                              (unsigned long)status->timestamp);
 
                 if (meshHandler.isRoot() && _instance) {
                     _instance->publishStatus(macStr, status->level, false,
-                                             status->heap, status->rssi, parentStr, status->phy);
+                                             status->heap, status->rssi, parentStr, status->phy,
+                                             status->timestamp);
+                } else if (!meshHandler.isRoot() && status->timestamp > 0) {
+                    // Child node: sync time from upstream parent
+                    meshHandler.syncTimeFromRoot(status->timestamp);
                 }
             }
             break;

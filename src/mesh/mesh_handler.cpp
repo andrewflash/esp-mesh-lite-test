@@ -5,6 +5,8 @@
 #include <esp_mac.h>
 #include <esp_wifi.h>
 #include <esp_mesh_lite.h>
+#include <time.h>
+#include <sys/time.h>
 
 // Get WiFi RSSI using ESP-IDF API (works with mesh-lite)
 static int8_t getWiFiRSSI()
@@ -283,6 +285,83 @@ uint8_t MeshHandler::getNegotiatedPhyMode()
     return 0;
 }
 
+void MeshHandler::initTimeSync()
+{
+    // Configure SNTP for NTP time synchronization
+    configTime(TIME_ZONE_OFFSET, 0, NTP_SERVER_PRIMARY, NTP_SERVER_SECONDARY);
+    Serial.println("[TIME] NTP sync started");
+}
+
+bool MeshHandler::isTimeSynced()
+{
+    time_t now;
+    time(&now);
+    // Time is valid if after Nov 2023 (Unix timestamp > 1700000000)
+    return now > 1700000000;
+}
+
+uint32_t MeshHandler::getTimestamp()
+{
+    if (!isTimeSynced()) {
+        return 0;
+    }
+    time_t now;
+    time(&now);
+    return (uint32_t)now;
+}
+
+void MeshHandler::syncTimeFromRoot(uint32_t timestamp)
+{
+    if (timestamp <= 1700000000) {
+        return;  // Invalid timestamp
+    }
+
+    // Only sync if time differs by more than 2 seconds (avoid log spam)
+    time_t current;
+    time(&current);
+    int32_t diff = (int32_t)timestamp - (int32_t)current;
+    if (diff < -2 || diff > 2) {
+        struct timeval tv = { .tv_sec = (time_t)timestamp, .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+        Serial.printf("[TIME] Synced from root: %lu (diff=%ld)\n",
+                      (unsigned long)timestamp, (long)diff);
+    }
+}
+
+bool MeshHandler::broadcastTimeSync(uint32_t timestamp)
+{
+    if (!isConnected() || timestamp == 0) {
+        return false;
+    }
+
+    // Get own MAC for the status message
+    uint8_t parentMac[6] = {0};
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+        memcpy(parentMac, ap_info.bssid, 6);
+    }
+
+    uint8_t buffer[sizeof(StatusMsg)];
+    size_t len = BinaryProtocol::createStatusMsg(
+        buffer, sizeof(buffer),
+        _mac,
+        getLevel(),
+        ESP.getFreeHeap(),
+        getWiFiRSSI(),
+        parentMac,
+        getNegotiatedPhyMode(),
+        timestamp
+    );
+
+    if (len == 0) return false;
+
+    bool result = sendBinaryToChildren(buffer, len);
+    if (result) {
+        Serial.printf("[TIME] Broadcast to children: %lu\n", (unsigned long)timestamp);
+    }
+    return result;
+}
+
 void MeshHandler::onEvent(MeshEventCallback callback)
 {
     _eventCallback = callback;
@@ -514,7 +593,8 @@ bool MeshHandler::sendStatusToRoot()
         ESP.getFreeHeap(),
         getWiFiRSSI(),
         parentMac,
-        getNegotiatedPhyMode()
+        getNegotiatedPhyMode(),
+        getTimestamp()
     );
 
     if (len == 0) return false;

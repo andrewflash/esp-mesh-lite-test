@@ -50,8 +50,9 @@ struct StatusMsg {
     int8_t rssi;        // WiFi RSSI
     uint8_t parentMac[6]; // Parent MAC (router BSSID if root, mesh parent STA MAC if child)
     uint8_t phy;        // Negotiated WiFi PHY mode (wifi_phy_mode_t: 1=LR,2=11B,3=11G,4=HT20,5=HT40,6=HE20)
+    uint32_t timestamp; // Unix epoch seconds (UTC)
 };
-// Total: 9 + 1 + 4 + 1 + 6 + 1 = 22 bytes
+// Total: 9 + 1 + 4 + 1 + 6 + 1 + 4 = 26 bytes
 
 // Command message (root -> child)
 struct CommandMsg {
@@ -90,7 +91,8 @@ public:
     static size_t createStatusMsg(uint8_t* buffer, size_t bufLen,
                                    const uint8_t* mac, uint8_t level,
                                    uint32_t heap, int8_t rssi,
-                                   const uint8_t* parentMac, uint8_t phy);
+                                   const uint8_t* parentMac, uint8_t phy,
+                                   uint32_t timestamp);
 
     // Create command message
     static size_t createCommandMsg(uint8_t* buffer, size_t bufLen,
