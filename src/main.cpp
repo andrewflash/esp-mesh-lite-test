@@ -11,11 +11,13 @@
  *   mesh-lite/{device_id}/cmd     - command to node (downlink)
  *   mesh-lite/broadcast           - broadcast to all nodes
  *
- * Status payload: {"id":"...","level":N,"root":bool,"heap":N,"rssi":N}
+ * Status payload: {"id":"...","level":N,"root":bool,"heap":N,"rssi":N,"parent":"...","phy":"..."}
  */
 
 #include <Arduino.h>
 #include <esp_task_wdt.h>
+#include <esp_wifi.h>
+#include <nvs_flash.h>
 #include "config.h"
 #include "mesh/mesh_handler.h"
 #include "mqtt/mqtt_client.h"
@@ -30,6 +32,15 @@ void logDebugStatus()
 {
     if (millis() - lastDebugLog < 5000) return;
     lastDebugLog = millis();
+
+    // Log what we're actually connected to
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+        Serial.printf("[DEBUG] Connected to SSID: %s, BSSID: %02X:%02X:%02X:%02X:%02X:%02X\n",
+            ap_info.ssid,
+            ap_info.bssid[0], ap_info.bssid[1], ap_info.bssid[2],
+            ap_info.bssid[3], ap_info.bssid[4], ap_info.bssid[5]);
+    }
 
     if (meshHandler.isMeshOnlyMode()) {
         Serial.printf("[DEBUG] Level: %d, Root: %s, Connected: %s, Mode: mesh-only\n",
@@ -62,7 +73,8 @@ void updateDisplay()
         meshHandler.isRoot(),
         mqtt.isConnected(),
         Gateway::getWiFiRSSI(),
-        ESP.getFreeHeap()
+        ESP.getFreeHeap(),
+        meshHandler.getParentId().c_str()
     );
 }
 
@@ -75,6 +87,13 @@ void setup()
     Serial.println("   ESP-Mesh-Lite + MQTT Gateway");
     Serial.printf("   Version: %s\n", PROJECT_VERSION);
     Serial.println("========================================\n");
+
+#if ERASE_NVS_ON_BOOT
+    // Erase NVS to clear stored WiFi credentials (development only)
+    Serial.println("[SETUP] Erasing NVS...");
+    nvs_flash_erase();
+    nvs_flash_init();
+#endif
 
     // Initialize watchdog timer
     esp_task_wdt_config_t wdt_config = {
@@ -108,10 +127,11 @@ void setup()
 
     display.showMessage("Mesh Started", meshHandler.getDeviceId().c_str(), "Connecting...");
 
-    // Initialize MQTT
-    mqtt.begin(MQTT_BROKER, MQTT_PORT, meshHandler.getDeviceId().c_str());
+    // Initialize MQTT (client ID = "{prefix}-{MAC}" for uniqueness)
+    static String mqttClientId = String(MQTT_CLIENT_PREFIX) + "-" + meshHandler.getDeviceId();
+    mqtt.begin(MQTT_BROKER, MQTT_PORT, mqttClientId.c_str());
     mqtt.setCredentials(MQTT_USER, MQTT_PASSWORD);
-    Serial.printf("[SETUP] MQTT: %s:%d\n", MQTT_BROKER, MQTT_PORT);
+    Serial.printf("[SETUP] MQTT: %s:%d, client=%s\n", MQTT_BROKER, MQTT_PORT, mqttClientId.c_str());
 
     // Initialize gateway (mesh-MQTT bridge)
     gateway.begin();

@@ -37,6 +37,14 @@ public:
     // Get MAC address for binary protocol
     const uint8_t* getMac() const { return _mac; }
 
+    // Get parent device ID (for tree visualization)
+    // Returns router BSSID if root, mesh parent STA MAC if child
+    String getParentId();
+
+    // Get actual negotiated WiFi PHY mode (not AP capabilities)
+    // Returns wifi_phy_mode_t: 1=LR, 2=11B, 3=11G, 4=HT20, 5=HT40, 6=HE20
+    static uint8_t getNegotiatedPhyMode();
+
     void onMessage(MeshMessageCallback callback);
     void onBinaryMessage(MeshBinaryCallback callback);
     void onEvent(MeshEventCallback callback);
@@ -46,6 +54,12 @@ public:
     void reportNetworkSuccess();    // Call when network operation succeeds
     uint8_t getConnectionFailures() const { return _connectionFailures; }
     bool isMeshOnlyMode() const { return _meshOnlyMode; }
+
+    // Recovery from mesh-only mode (call when node becomes root again)
+    void checkRecoveryFromMeshOnly();
+
+    // Check if mesh channel is ready for sending (needs time after WiFi connects)
+    bool isChannelReady();
 
 private:
     MeshLite _mesh;
@@ -58,8 +72,19 @@ private:
     // Connection failure tracking
     uint8_t _connectionFailures;
     bool _meshOnlyMode;
+    uint8_t _wifiDisconnects;
+
+    // Stored router credentials for recovery
+    String _savedRouterSsid;
+    String _savedRouterPassword;
+
+    // Channel ready tracking (TCP channel needs time after WiFi connects)
+    unsigned long _levelChangeTime;
+    uint8_t _lastLevel;
+    static const unsigned long CHANNEL_READY_DELAY_MS = 3000;  // Wait 3s after level change
 
     static void meshEventHandler(esp_event_base_t base, int32_t id, void* data);
+    static void wifiEventHandler(void* arg, esp_event_base_t base, int32_t id, void* data);
     static cJSON* meshMessageHandler(cJSON* payload, uint32_t seq);
     static cJSON* meshBinaryHandler(cJSON* payload, uint32_t seq);
     static MeshHandler* _instance;

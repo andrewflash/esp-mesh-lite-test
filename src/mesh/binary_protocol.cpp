@@ -18,7 +18,8 @@ void BinaryProtocol::fillHeader(BinaryMsgHeader* header, uint8_t type, const uin
 
 size_t BinaryProtocol::createStatusMsg(uint8_t* buffer, size_t bufLen,
                                         const uint8_t* mac, uint8_t level,
-                                        uint32_t heap, int8_t rssi)
+                                        uint32_t heap, int8_t rssi,
+                                        const uint8_t* parentMac, uint8_t phy)
 {
     if (bufLen < sizeof(StatusMsg)) return 0;
 
@@ -27,6 +28,8 @@ size_t BinaryProtocol::createStatusMsg(uint8_t* buffer, size_t bufLen,
     msg->level = level;
     msg->heap = heap;
     msg->rssi = rssi;
+    memcpy(msg->parentMac, parentMac, 6);
+    msg->phy = phy;
 
     return sizeof(StatusMsg);
 }

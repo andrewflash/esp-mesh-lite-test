@@ -1,8 +1,10 @@
 #include "mesh_handler.h"
 #include "../config.h"
 #include <cJSON.h>
+#include <esp_event.h>
 #include <esp_mac.h>
 #include <esp_wifi.h>
+#include <esp_mesh_lite.h>
 
 // Get WiFi RSSI using ESP-IDF API (works with mesh-lite)
 static int8_t getWiFiRSSI()
@@ -23,9 +25,36 @@ MeshHandler::MeshHandler()
     , _binaryCallback(nullptr)
     , _connectionFailures(0)
     , _meshOnlyMode(false)
+    , _wifiDisconnects(0)
+    , _levelChangeTime(0)
+    , _lastLevel(0)
 {
     _instance = this;
     memset(_mac, 0, sizeof(_mac));
+}
+
+bool MeshHandler::isChannelReady()
+{
+    uint8_t currentLevel = getLevel();
+
+    // Track level changes
+    if (currentLevel != _lastLevel) {
+        _lastLevel = currentLevel;
+        _levelChangeTime = millis();
+        Serial.printf("[MESH] Level changed to %d, waiting for channel...\n", currentLevel);
+    }
+
+    // Not connected = not ready
+    if (currentLevel == 0) {
+        return false;
+    }
+
+    // Wait for TCP channel to establish after WiFi connects
+    if (millis() - _levelChangeTime < CHANNEL_READY_DELAY_MS) {
+        return false;
+    }
+
+    return true;
 }
 
 void MeshHandler::generateDeviceId()
@@ -72,13 +101,74 @@ void MeshHandler::reportNetworkSuccess()
 void MeshHandler::switchToMeshOnlyMode()
 {
     _meshOnlyMode = true;
-    Serial.printf("[MESH] Switching to mesh-only mode after %d network failures\n",
+    Serial.printf("[MESH] Switching to mesh-only mode after %d failures\n",
                   _connectionFailures);
 
     // Disable router-first mode, force mesh mode
     _mesh.setNetworkingMode(false, MESH_ROUTER_RSSI_THRESHOLD);
 
-    Serial.println("[MESH] Now scanning for mesh parent nodes...");
+    // Use longer fusion interval to periodically retry router connection
+    // This allows recovery when router comes back online
+    _mesh.setFusionConfig(60, MESH_FUSION_RECOVERY_SEC);
+
+    // Keep router credentials - allows recovery when router returns
+    // The mesh-only networking mode will prioritize mesh parents over router
+
+    Serial.printf("[MESH] Now scanning for mesh parents (will retry router every %ds)\n",
+                  MESH_FUSION_RECOVERY_SEC);
+}
+
+void MeshHandler::checkRecoveryFromMeshOnly()
+{
+    // If we were in mesh-only mode and became root, router is back
+    if (_meshOnlyMode && isRoot()) {
+        _meshOnlyMode = false;
+        _connectionFailures = 0;
+        _wifiDisconnects = 0;
+
+        // Restore normal fusion interval
+        _mesh.setFusionConfig(MESH_FUSION_START_SEC, MESH_FUSION_INTERVAL_SEC);
+
+        // Re-enable router-first mode
+        _mesh.setNetworkingMode(MESH_ROUTER_FIRST, MESH_ROUTER_RSSI_THRESHOLD);
+
+        Serial.println("[MESH] Recovered from mesh-only mode - router available");
+    }
+}
+
+void MeshHandler::wifiEventHandler(void* arg, esp_event_base_t base, int32_t id, void* data)
+{
+    if (!_instance) return;
+
+    if (base == IP_EVENT && id == IP_EVENT_STA_GOT_IP) {
+        if (_instance->_wifiDisconnects > 0) {
+            Serial.println("[MESH] STA got IP, reset WiFi disconnect counter");
+            _instance->_wifiDisconnects = 0;
+        }
+        return;
+    }
+
+    if (base != WIFI_EVENT || id != WIFI_EVENT_STA_DISCONNECTED) {
+        return;
+    }
+
+    // In mesh-only mode, WiFi disconnects are expected during mesh operation
+    // Don't count them or log spam
+    if (_instance->_meshOnlyMode) {
+        return;
+    }
+
+    wifi_event_sta_disconnected_t* event = static_cast<wifi_event_sta_disconnected_t*>(data);
+    uint16_t reason = event ? event->reason : 0;
+    _instance->_wifiDisconnects++;
+
+    Serial.printf("[MESH] WiFi disconnected (reason=%u) %u/%u\n",
+                  reason, _instance->_wifiDisconnects, MESH_MAX_WIFI_FAILURES);
+
+    if (_instance->_wifiDisconnects >= MESH_MAX_WIFI_FAILURES) {
+        _instance->_wifiDisconnects = 0;
+        _instance->switchToMeshOnlyMode();
+    }
 }
 
 cJSON* MeshHandler::meshMessageHandler(cJSON* payload, uint32_t seq)
@@ -120,12 +210,21 @@ bool MeshHandler::begin(const char* routerSsid, const char* routerPassword,
 {
     generateDeviceId();
 
+    // Save credentials for recovery after mesh-only mode
+    _savedRouterSsid = routerSsid;
+    _savedRouterPassword = routerPassword;
+
     _mesh.onEvent(meshEventHandler);
     _mesh.setRouterCredentials(routerSsid, routerPassword);
     _mesh.setSoftAPCredentials(softapSsid, softapPassword);
     _mesh.setMeshId(meshId);
 
-    return _mesh.begin();
+    bool ok = _mesh.begin();
+    if (ok) {
+        esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, wifiEventHandler, nullptr);
+        esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifiEventHandler, nullptr);
+    }
+    return ok;
 }
 
 void MeshHandler::start()
@@ -144,6 +243,9 @@ void MeshHandler::start()
         MESH_RECONNECT_PARENT_COUNT,
         MESH_RECONNECT_SCAN_INTERVAL
     );
+
+    // WiFi protocol modes (LR mode extends range but only works between ESP32s)
+    _mesh.setWiFiProtocol(MESH_WIFI_STA_PROTOCOL, MESH_WIFI_SOFTAP_PROTOCOL);
 
     _mesh.start();
 
@@ -170,6 +272,15 @@ bool MeshHandler::isConnected()
 String MeshHandler::getDeviceId()
 {
     return _deviceId;
+}
+
+uint8_t MeshHandler::getNegotiatedPhyMode()
+{
+    wifi_phy_mode_t mode;
+    if (esp_wifi_sta_get_negotiated_phymode(&mode) == ESP_OK) {
+        return (uint8_t)mode;
+    }
+    return 0;
 }
 
 void MeshHandler::onEvent(MeshEventCallback callback)
@@ -240,7 +351,7 @@ cJSON* MeshHandler::meshBinaryHandler(cJSON* payload, uint32_t seq)
 // Uplink: child -> root
 bool MeshHandler::sendToRoot(const char* data)
 {
-    if (!isConnected() || isRoot()) {
+    if (!isConnected() || isRoot() || !isChannelReady()) {
         return false;
     }
 
@@ -324,7 +435,7 @@ static size_t base64Encode(const uint8_t* input, size_t inputLen, char* output, 
 // Binary uplink: child -> root
 bool MeshHandler::sendBinaryToRoot(const uint8_t* data, size_t len)
 {
-    if (!isConnected() || isRoot() || len == 0) {
+    if (!isConnected() || isRoot() || !isChannelReady() || len == 0) {
         return false;
     }
 
@@ -386,16 +497,57 @@ bool MeshHandler::sendStatusToRoot()
         return false;
     }
 
+    // Get parent MAC (STA MAC derived from BSSID)
+    uint8_t parentMac[6] = {0};
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+        memcpy(parentMac, ap_info.bssid, 6);
+        // Convert SoftAP BSSID to STA MAC: clear locally administered bit (bit 1 of first byte)
+        parentMac[0] &= 0xFD;
+    }
+
     uint8_t buffer[sizeof(StatusMsg)];
     size_t len = BinaryProtocol::createStatusMsg(
         buffer, sizeof(buffer),
         _mac,
         getLevel(),
         ESP.getFreeHeap(),
-        getWiFiRSSI()
+        getWiFiRSSI(),
+        parentMac,
+        getNegotiatedPhyMode()
     );
 
     if (len == 0) return false;
 
     return sendBinaryToRoot(buffer, len);
+}
+
+// Get parent device ID for tree visualization
+// Returns router BSSID if root, mesh parent STA MAC if child
+String MeshHandler::getParentId()
+{
+    if (!isConnected()) {
+        return "";
+    }
+
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {
+        return "";
+    }
+
+    uint8_t parentMac[6];
+    memcpy(parentMac, ap_info.bssid, 6);
+
+    // If not root, convert parent's SoftAP BSSID to STA MAC
+    // ESP32 SoftAP MAC = STA MAC with bit 1 of first byte set (locally administered)
+    // Clear bit 1 to get STA MAC
+    if (!isRoot()) {
+        parentMac[0] &= 0xFD;
+    }
+
+    char id[13];
+    snprintf(id, sizeof(id), "%02X%02X%02X%02X%02X%02X",
+             parentMac[0], parentMac[1], parentMac[2],
+             parentMac[3], parentMac[4], parentMac[5]);
+    return String(id);
 }

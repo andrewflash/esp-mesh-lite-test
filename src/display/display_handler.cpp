@@ -100,7 +100,8 @@ void DisplayHandler::drawFooter(const char* text)
 }
 
 void DisplayHandler::showStatus(const char* deviceId, uint8_t level, bool isRoot,
-                                 bool mqttConnected, int8_t rssi, uint32_t heap)
+                                 bool mqttConnected, int8_t rssi, uint32_t heap,
+                                 const char* parentId)
 {
     if (!_initialized) return;
 
@@ -109,10 +110,10 @@ void DisplayHandler::showStatus(const char* deviceId, uint8_t level, bool isRoot
     // Header
     drawHeader("Mesh-Lite Gateway");
 
-    // Status content
+    // Status content - use smaller line height to fit parent info
     _display->setFont(u8g2_font_6x10_tf);
     int y = 14;
-    int lineHeight = 11;
+    int lineHeight = 10;
 
     // Device ID (truncate if needed)
     char line[32];
@@ -120,27 +121,29 @@ void DisplayHandler::showStatus(const char* deviceId, uint8_t level, bool isRoot
     _display->drawStr(0, y, line);
     y += lineHeight;
 
-    // Level and role
+    // Level and role + MQTT status
     snprintf(line, sizeof(line), "L%d %s", level, isRoot ? "[ROOT]" : "[NODE]");
     _display->drawStr(0, y, line);
-
-    // MQTT status on same line
     _display->drawStr(72, y, mqttConnected ? "MQTT:OK" : "MQTT:--");
     y += lineHeight;
 
-    // RSSI and heap
-    snprintf(line, sizeof(line), "RSSI:%ddBm", rssi);
+    // Parent ID (show last 6 chars for brevity)
+    if (parentId && strlen(parentId) > 0) {
+        const char* shortParent = strlen(parentId) > 6 ? parentId + 6 : parentId;
+        snprintf(line, sizeof(line), "P: ...%s", shortParent);
+    } else {
+        snprintf(line, sizeof(line), "P: --");
+    }
     _display->drawStr(0, y, line);
 
+    // Heap on same line
     snprintf(line, sizeof(line), "%luK", heap / 1024);
     _display->drawStr(90, y, line);
+    y += lineHeight;
 
-    // Footer with mode
-    if (isRoot) {
-        drawFooter(mqttConnected ? "Publishing..." : "Connecting...");
-    } else {
-        drawFooter("Sending to root...");
-    }
+    // RSSI
+    snprintf(line, sizeof(line), "RSSI: %ddBm", rssi);
+    _display->drawStr(0, y, line);
 
     update();
 }

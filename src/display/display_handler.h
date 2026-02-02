@@ -18,7 +18,8 @@ public:
 
     // Status display
     void showStatus(const char* deviceId, uint8_t level, bool isRoot,
-                    bool mqttConnected, int8_t rssi, uint32_t heap);
+                    bool mqttConnected, int8_t rssi, uint32_t heap,
+                    const char* parentId);
     void showMessage(const char* line1, const char* line2 = nullptr,
                      const char* line3 = nullptr);
     void showProgress(const char* title, uint8_t percent);
@@ -46,7 +47,7 @@ public:
     bool begin() { return false; }
     void clear() {}
     void update() {}
-    void showStatus(const char*, uint8_t, bool, bool, int8_t, uint32_t) {}
+    void showStatus(const char*, uint8_t, bool, bool, int8_t, uint32_t, const char*) {}
     void showMessage(const char*, const char* = nullptr, const char* = nullptr) {}
     void showProgress(const char*, uint8_t) {}
 };

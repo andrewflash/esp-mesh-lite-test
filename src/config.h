@@ -3,6 +3,11 @@
 // Project Version
 #define PROJECT_VERSION "1.1.0"
 
+// Development Options
+#ifndef ERASE_NVS_ON_BOOT
+#define ERASE_NVS_ON_BOOT 0               // 1 = erase NVS on boot (clears stored WiFi credentials)
+#endif
+
 // Build-time configuration from .env
 #ifndef WIFI_SSID
 #define WIFI_SSID "DefaultSSID"
@@ -18,6 +23,17 @@
 #endif
 #ifndef MESH_ID
 #define MESH_ID 77
+#endif
+// WiFi Protocol Modes (use MeshLiteWiFiProtocol enum values, can be OR'd)
+// STA: For connecting to router or mesh parent
+// SoftAP: For mesh children to connect
+// Available modes: MESH_WIFI_PROTOCOL_11B, _11G, _11N, _LR, _BGN, _BGNLR, _LR_ONLY
+// Note: LR (Long Range) only works between ESP32 devices, not with standard routers
+#ifndef MESH_WIFI_STA_PROTOCOL
+#define MESH_WIFI_STA_PROTOCOL MESH_WIFI_PROTOCOL_BGNLR  // B/G/N/LR for router + mesh
+#endif
+#ifndef MESH_WIFI_SOFTAP_PROTOCOL
+#define MESH_WIFI_SOFTAP_PROTOCOL MESH_WIFI_PROTOCOL_BGNLR  // B/G/N/LR for mesh
 #endif
 
 // Mesh Networking Mode
@@ -35,6 +51,9 @@
 #ifndef MESH_FUSION_INTERVAL_SEC
 #define MESH_FUSION_INTERVAL_SEC 60      // seconds between fusion checks
 #endif
+#ifndef MESH_FUSION_RECOVERY_SEC
+#define MESH_FUSION_RECOVERY_SEC 300     // seconds between router retry in mesh-only mode (5 min)
+#endif
 
 // Mesh Reconnection (when disconnected from parent)
 #ifndef MESH_RECONNECT_PARENT_INTERVAL
@@ -51,6 +70,9 @@
 #ifndef MESH_MAX_ROUTER_FAILURES
 #define MESH_MAX_ROUTER_FAILURES 5        // max MQTT/network failures before mesh fallback
 #endif
+#ifndef MESH_MAX_WIFI_FAILURES
+#define MESH_MAX_WIFI_FAILURES 5          // max WiFi disconnects before forcing mesh-only
+#endif
 
 // MQTT Configuration
 #ifndef MQTT_BROKER
@@ -65,22 +87,25 @@
 #ifndef MQTT_PASSWORD
 #define MQTT_PASSWORD ""
 #endif
+#ifndef MQTT_CLIENT_PREFIX
+#define MQTT_CLIENT_PREFIX "mesh"         // Client ID = {prefix}-{MAC}
+#endif
 
 // MQTT Topics (device-centric structure)
 #define MQTT_TOPIC_PREFIX "mesh-lite"
-//   {prefix}/{device_id}/status  - node status: {"id":"...","level":N,"root":bool,"heap":N,"rssi":N}
-//   {prefix}/{device_id}/data    - node data:   {"id":"...","data":{...}}
-//   {prefix}/{device_id}/cmd     - command to node (downlink)
-//   {prefix}/broadcast           - broadcast to all nodes
+//   {prefix}/{device_id}/status    - node status: {"id":"...","level":N,"root":bool,"heap":N,"rssi":N,"parent":"..."}
+//   {prefix}/{device_id}/data      - node data:   {"id":"...","data":{...}}
+//   {prefix}/{device_id}/cmd       - command to node (downlink)
+//   {prefix}/broadcast             - broadcast to all nodes
 
 // Watchdog
 #ifndef WDT_TIMEOUT_SEC
 #define WDT_TIMEOUT_SEC 30                // Watchdog timeout in seconds
 #endif
 
-// Intervals
-#define STATUS_INTERVAL_MS 10000
-#define MQTT_RECONNECT_INTERVAL_MS 5000
+// Intervals (optimized for 50+ nodes)
+#define STATUS_INTERVAL_MS 30000          // Node status publish interval
+#define MQTT_RECONNECT_INTERVAL_MS 5000   // MQTT reconnection throttle
 
 // OLED Display Configuration
 #ifndef DISPLAY_ENABLED

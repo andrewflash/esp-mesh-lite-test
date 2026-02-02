@@ -22,6 +22,9 @@ public:
     // Get WiFi RSSI
     static int8_t getWiFiRSSI();
 
+    // Check if WiFi STA has valid IP (ready for network operations)
+    static bool isWiFiReady();
+
 private:
     unsigned long _lastPublishTime;
     unsigned long _lastMqttAttempt;
@@ -29,7 +32,7 @@ private:
 
     // MQTT publishing
     void publishStatus(const char* deviceId, uint8_t level, bool isRoot,
-                       uint32_t heap, int8_t rssi);
+                       uint32_t heap, int8_t rssi, const char* parentId, uint8_t phy);
     void publishData(const char* deviceId, const char* data);
     void publishRootStatus();
 
