@@ -20,7 +20,7 @@ size_t BinaryProtocol::createStatusMsg(uint8_t* buffer, size_t bufLen,
                                         const uint8_t* mac, uint8_t level,
                                         uint32_t heap, int8_t rssi,
                                         const uint8_t* parentMac, uint8_t phy,
-                                        uint32_t timestamp)
+                                        uint32_t timestamp, const char* version)
 {
     if (bufLen < sizeof(StatusMsg)) return 0;
 
@@ -32,6 +32,11 @@ size_t BinaryProtocol::createStatusMsg(uint8_t* buffer, size_t bufLen,
     memcpy(msg->parentMac, parentMac, 6);
     msg->phy = phy;
     msg->timestamp = timestamp;
+    memset(msg->version, 0, sizeof(msg->version));
+    if (version && version[0]) {
+        strncpy(msg->version, version, sizeof(msg->version) - 1);
+        msg->version[sizeof(msg->version) - 1] = '\0';
+    }
 
     return sizeof(StatusMsg);
 }

@@ -350,7 +350,8 @@ bool MeshHandler::broadcastTimeSync(uint32_t timestamp)
         getWiFiRSSI(),
         parentMac,
         getNegotiatedPhyMode(),
-        timestamp
+        timestamp,
+        PROJECT_VERSION
     );
 
     if (len == 0) return false;
@@ -594,7 +595,8 @@ bool MeshHandler::sendStatusToRoot()
         getWiFiRSSI(),
         parentMac,
         getNegotiatedPhyMode(),
-        getTimestamp()
+        getTimestamp(),
+        PROJECT_VERSION
     );
 
     if (len == 0) return false;

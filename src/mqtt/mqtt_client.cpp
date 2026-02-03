@@ -22,6 +22,7 @@ void MqttClient::begin(const char* broker, uint16_t port, const char* clientId)
     _broker = broker;
     _port = port;
     _clientId = clientId;
+    _mqttClient.setBufferSize(MQTT_BUFFER_SIZE);
     _mqttClient.setServer(_broker, _port);
     _mqttClient.setCallback(mqttCallback);
 }

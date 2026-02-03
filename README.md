@@ -14,6 +14,7 @@ ESP32 mesh network with MQTT gateway using [ESP-Mesh-Lite](https://github.com/es
 - **Auto mesh fallback** - Nodes automatically rejoin mesh when router connection lost
 - **OLED display** - Configurable status display (SSD1306/SH1106, 128x64/128x32)
 - **Watchdog timer** - Auto-restart on hang (configurable timeout)
+- **OTA updates** - MQTT-triggered OTA with progress/status reporting
 
 ## Architecture
 
@@ -45,6 +46,8 @@ Mesh Fallback (C loses router):
 src/
 ├── main.cpp              # Application entry point
 ├── config.h              # Configuration (mesh, MQTT, display, watchdog)
+├── ota/
+│   ├── ota_handler.h/cpp     # HTTPS OTA handler (URL-based)
 ├── mesh/
 │   ├── mesh_handler.h/cpp    # Mesh communication wrapper
 │   └── binary_protocol.h/cpp # Optimized binary messages
@@ -75,6 +78,10 @@ lib/
    pio run -t upload && pio device monitor
    ```
 
+4. OTA (optional):
+   - Ensure the OTA partition table is active (`partitions_ota.csv` is already set in `platformio.ini`).
+   - Host the built firmware binary (e.g., `.pio/build/<env>/firmware.bin`) on an HTTP/HTTPS server.
+
 ## MQTT Topics
 
 Device-centric structure: `mesh-lite/{device_id}/xxx`
@@ -85,6 +92,9 @@ Device-centric structure: `mesh-lite/{device_id}/xxx`
 | `mesh-lite/{id}/data` | Publish | Data from node |
 | `mesh-lite/{id}/cmd` | Subscribe | Command to specific node |
 | `mesh-lite/broadcast` | Subscribe | Broadcast to all nodes |
+| `mesh-lite/{id}/ota/cmd` | Subscribe | OTA command to device (root nodes only) |
+| `mesh-lite/{id}/ota/status` | Publish | OTA status/progress |
+| `mesh-lite/broadcast/ota` | Subscribe | Broadcast OTA command (root nodes only) |
 
 ### Status Payload
 
@@ -108,6 +118,61 @@ All nodes publish the same status format:
 | `heap` | Free heap memory (bytes) |
 | `rssi` | WiFi signal strength (dBm) |
 
+## OTA (Over-The-Air) Updates
+
+OTA updates are triggered via MQTT and executed using ESP-IDF OTA (HTTP/HTTPS).
+Only nodes that are connected to the router and MQTT (root nodes) can receive OTA commands.
+
+### OTA Command Payloads
+
+Publish to `mesh-lite/{id}/ota/cmd` or `mesh-lite/broadcast/ota`:
+
+**Start**
+```json
+{
+  "action": "start",
+  "url": "https://example.com/firmware.bin",
+  "version": "1.1.1",
+  "sha256": "64-hex-optional",
+  "size": 123456
+}
+```
+
+**Cancel**
+```json
+{ "action": "cancel" }
+```
+
+**Status**
+```json
+{ "action": "status" }
+```
+
+Notes:
+- `url` is required for `start`.
+- `version` is optional and reported in OTA status.
+- `size` is optional and helps progress reporting when the server does not provide length.
+- `sha256` is accepted for future validation but is not enforced yet.
+
+### OTA Status Payload
+
+Published to `mesh-lite/{id}/ota/status`:
+
+```json
+{
+  "state": "downloading",
+  "progress": 42,
+  "bytes_written": 53248,
+  "bytes_total": 126976,
+  "version": "1.1.1"
+}
+```
+
+States: `idle`, `starting`, `downloading`, `writing`, `verifying`, `complete`, `failed`, `cancelled`
+Errors (only on failure): `invalid_url`, `connection_failed`, `http_error`, `timeout`,
+`checksum_mismatch`, `signature_invalid`, `write_failed`, `partition_error`,
+`version_invalid`, `cancelled`, `unknown`
+
 ## Configuration
 
 Key settings in `config.h`:
@@ -128,6 +193,12 @@ Key settings in `config.h`:
 
 // Status Reporting
 #define STATUS_INTERVAL_MS 10000      // Status publish interval
+
+// OTA
+#define OTA_ENABLED 1                 // 0 = disabled, 1 = enabled
+#define OTA_SECURITY_LEVEL OTA_SECURITY_HTTPS  // HTTPS (default) or OTA_SECURITY_NONE for HTTP
+#define OTA_TIMEOUT_SEC 300           // OTA download timeout
+#define OTA_PROGRESS_INTERVAL_MS 5000 // Status update interval during OTA
 ```
 
 ## Binary Protocol
@@ -146,6 +217,7 @@ Binary messages are base64-encoded for mesh transport, then decoded and converte
 
 - PlatformIO with [pioarduino](https://github.com/pioarduino/platform-espressif32) platform (ESP-IDF 5.x)
 - ESP32, ESP32-S2, ESP32-S3, ESP32-C3, or ESP32-C6
+- OTA requires an OTA partition table (this repo uses `partitions_ota.csv`)
 
 ## License
 

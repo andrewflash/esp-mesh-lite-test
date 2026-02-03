@@ -90,6 +90,9 @@
 #ifndef MQTT_CLIENT_PREFIX
 #define MQTT_CLIENT_PREFIX "mesh"         // Client ID = {prefix}-{MAC}
 #endif
+#ifndef MQTT_BUFFER_SIZE
+#define MQTT_BUFFER_SIZE 2048             // Increase to allow OTA payloads with sha/size
+#endif
 
 // MQTT Topics (device-centric structure)
 #define MQTT_TOPIC_PREFIX "mesh-lite"
@@ -108,6 +111,51 @@
 #ifndef TIME_ZONE_OFFSET
 #define TIME_ZONE_OFFSET 0            // UTC offset in seconds (0 = UTC)
 #endif
+
+// OTA (Over-The-Air) Update Configuration
+#ifndef OTA_ENABLED
+#define OTA_ENABLED 1                 // 0 = disabled, 1 = enabled
+#endif
+
+// OTA Security Levels
+#define OTA_SECURITY_NONE       0     // HTTP only (development)
+#define OTA_SECURITY_HTTPS      1     // HTTPS with CA bundle
+#define OTA_SECURITY_SIGNED     2     // HTTPS + RSA signature verification
+
+#ifndef OTA_SECURITY_LEVEL
+#define OTA_SECURITY_LEVEL OTA_SECURITY_HTTPS  // Default: HTTPS
+#endif
+
+// Derived security flags
+#if OTA_SECURITY_LEVEL >= OTA_SECURITY_HTTPS
+#define OTA_USE_HTTPS 1
+#else
+#define OTA_USE_HTTPS 0
+#endif
+
+#if OTA_SECURITY_LEVEL >= OTA_SECURITY_SIGNED
+#define OTA_VERIFY_SIGNATURE 1
+#else
+#define OTA_VERIFY_SIGNATURE 0
+#endif
+
+// OTA Timing
+#ifndef OTA_TIMEOUT_SEC
+#define OTA_TIMEOUT_SEC 300           // 5 minutes max for OTA download
+#endif
+#ifndef OTA_PROGRESS_INTERVAL_MS
+#define OTA_PROGRESS_INTERVAL_MS 5000 // Status update interval during OTA
+#endif
+
+// OTA Server (optional - can be overridden via MQTT command)
+#ifndef OTA_SERVER_URL
+#define OTA_SERVER_URL ""             // Default OTA server base URL
+#endif
+
+// OTA MQTT Topics
+// {prefix}/{device_id}/ota/cmd      <- Command to device (subscribe)
+// {prefix}/{device_id}/ota/status   -> Status from device (publish)
+// {prefix}/broadcast/ota            <- Broadcast to all (subscribe)
 
 // Watchdog
 #ifndef WDT_TIMEOUT_SEC
