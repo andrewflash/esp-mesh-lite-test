@@ -1,7 +1,7 @@
 #pragma once
 
 // Project Version
-#define PROJECT_VERSION "1.1.0"
+#define PROJECT_VERSION "1.2.0"
 
 // Development Options
 #ifndef ERASE_NVS_ON_BOOT
